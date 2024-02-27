@@ -1,4 +1,47 @@
 # logic_processor.py
+import re
+
+def parse_input(input_text):
+    input_text = input_text.lower()
+    tokens = []
+    buffer = ""
+    in_period_enclosed_name = False
+
+    for char in input_text:
+        if char.isalpha() or char.isdigit():
+            # Add alphabet and digit characters to the buffer
+            buffer += char
+        elif char == '.':
+            if not in_period_enclosed_name:
+                # Starting a period-enclosed name
+                in_period_enclosed_name = True
+                buffer += char
+            else:
+                # Ending a period-enclosed name
+                buffer += char
+                tokens.append(buffer)
+                buffer = ""
+                in_period_enclosed_name = False
+        elif char.isspace():
+            if buffer:
+                if not in_period_enclosed_name:
+                    # If not in a period-enclosed name, finalize the current token
+                    tokens.append(buffer)
+                    buffer = ""
+                else:
+                    # If whitespace within a period-enclosed name, include it in the buffer
+                    buffer += char
+        else:
+            # If any other character is encountered outside of a period-enclosed name, raise an error
+            if not in_period_enclosed_name:
+                raise ValueError("Invalid characters in input")
+
+    # Check for any remaining buffer content to be added as the last token
+    if buffer:
+        tokens.append(buffer)
+
+    return tokens
+
 
 def count_characters(text):
     """
