@@ -1,47 +1,55 @@
 # logic_processor.py
 import re
+from src.predicates import fatci, sumji, vujni, dunli, steni, steko, cmavo
 
 def parse_input(input_text):
-    input_text = input_text.lower()
+    input_text = input_text.lower() + ' '  # Ensure processing of the last token
     tokens = []
+
     buffer = ""
     in_period_enclosed_name = False
 
     for char in input_text:
         if char.isalpha() or char.isdigit():
-            # Add alphabet and digit characters to the buffer
             buffer += char
         elif char == '.':
-            if not in_period_enclosed_name:
-                # Starting a period-enclosed name
+            # Check for consecutive periods or start/end of a period-enclosed name
+            if not buffer and not in_period_enclosed_name:
+                # Starting a new name with a period
                 in_period_enclosed_name = True
                 buffer += char
-            else:
-                # Ending a period-enclosed name
+            elif buffer and in_period_enclosed_name:
+                # Ending a name with a period
                 buffer += char
-                tokens.append(buffer)
+                tokens.append(('Name', buffer))
+                print(f"Token: {buffer}, Type: Name")
                 buffer = ""
                 in_period_enclosed_name = False
+            else:
+                # Invalid usage of periods
+                raise ValueError(f"Invalid period usage near: {buffer}")
         elif char.isspace():
             if buffer:
-                if not in_period_enclosed_name:
-                    # If not in a period-enclosed name, finalize the current token
-                    tokens.append(buffer)
-                    buffer = ""
+                # Process the accumulated buffer
+                if buffer.isdigit():
+                    # Number validation for leading zeros
+                    if len(buffer) > 1 and buffer.startswith('0'):
+                        raise ValueError(f"Invalid number with leading zeros: {buffer}")
+                    tokens.append(('Number', buffer))
+                elif len(buffer) == 1 and buffer != 'i':  # Exclude 'i'
+                    tokens.append(('Short Word', buffer))
+                elif len(buffer) == 5:
+                    tokens.append(('Predicate Word', buffer))
                 else:
-                    # If whitespace within a period-enclosed name, include it in the buffer
-                    buffer += char
+                    # Generic catch-all for other tokens
+                    tokens.append(('Other', buffer))
+                print(f"Token: {buffer}, Type: Other")
+                buffer = ""
         else:
-            # If any other character is encountered outside of a period-enclosed name, raise an error
-            if not in_period_enclosed_name:
-                raise ValueError("Invalid characters in input")
-
-    # Check for any remaining buffer content to be added as the last token
-    if buffer:
-        tokens.append(buffer)
+            # Catch-all for any other characters
+            raise ValueError(f"Invalid character in input: {char}")
 
     return tokens
-
 
 def count_characters(text):
     """
