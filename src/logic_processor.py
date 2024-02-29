@@ -2,6 +2,7 @@
 import re
 from predicates import fatci, sumji, vujni, dunli, steni, steko, cmavo
 
+# Maps Lojban predicate names to corresponding Python function implementations.
 predicate_functions = {
     'fatci': fatci,
     'sumji': sumji,
@@ -10,107 +11,112 @@ predicate_functions = {
     'steni': steni,
     'steko': steko,
     'cmavo': cmavo,
-    # Add more mappings as needed
 }
 
 def process_lojban_statement(statement, variables):
-    # The 'variables' dictionary is now passed in as an argument
-    tokens = tokenize_lojban(statement)  # Tokenize the input statement correctly
+    """
+    Processes a Lojban statement, executing predicates and managing variables.
+    
+    Args:
+        statement (str): The Lojban statement to be processed.
+        variables (dict): A dictionary to store and track variables' values.
+        
+    Returns:
+        str: A message indicating the completion of processing.
+    """
+    # Tokenizes the Lojban statement into identifiable parts.
+    tokens = tokenize_lojban(statement)
 
-    # Initialize control variables
+    # Initialize control variables for predicate processing.
     predicate_name = None
     args = []
-    swap_next_args = False  # Flag to indicate if the next predicate's arguments should be swapped
+    swap_next_args = False  # Determines if arguments of the next predicate need to be swapped.
 
+    # Iterate over each token to process predicates and their arguments.
     for token_type, token_value in tokens:
         if token_value == 'i':
-            continue  # Skip the initial 'i', denoting the start of a statement
+            # Skip 'i', which denotes the start of a statement.
+            continue
 
         if token_type == 'Short Word' and token_value == 'se':
+            # 'se' indicates the arguments for the next predicate should be swapped.
             swap_next_args = True
-            continue  # 'se' indicates argument swap for the next predicate; it's not an argument itself
+            continue
 
         if token_type == 'Predicate Word':
-            # Before processing the new predicate, check if there's a previous predicate to process
+            # Process any pending predicate before starting a new one.
             if predicate_name:
                 process_predicate(predicate_name, args, variables, swap_next_args)
-                args = []  # Reset arguments for the next predicate
-                swap_next_args = False  # Reset the swap flag after processing
+                args = []  # Reset for the next predicate.
+                swap_next_args = False  # Reset the flag.
 
-            predicate_name = token_value  # Update the current predicate
+            predicate_name = token_value  # Update the current predicate name.
         else:
-            # Append other tokens as arguments (excluding 'se')
+            # Append other tokens as arguments for the current predicate.
             args.append(token_value)
 
-    # Process the last predicate in the statement
+    # Ensure the last predicate is processed.
     if predicate_name:
         process_predicate(predicate_name, args, variables, swap_next_args)
 
     return "Lojban statement processing complete."
 
 def process_predicate(predicate_name, args, variables, swap_next_args):
-    # Initialize a list to hold the resolved arguments for the predicate
-    resolved_args = []
+    """
+    Processes a predicate with its arguments, applying any necessary argument adjustments.
 
-    # Track whether the next argument should be treated as a variable name due to 'lo'
-    next_arg_is_variable = False
+    Args:
+        predicate_name (str): The name of the predicate to process.
+        args (list): The arguments for the predicate.
+        variables (dict): The current state of variables.
+        swap_next_args (bool): Whether to swap the first two arguments.
+    """
+    # Prepare arguments, swapping if indicated by 'se'.
+    if swap_next_args and len(args) >= 2:
+        args[0], args[1] = args[1], args[0]
 
-    for arg in args:
-        if arg == 'lo':
-            next_arg_is_variable = True  # The next argument should be treated as a variable name
-            continue
-        elif arg == 'se' and not swap_next_args:
-            swap_next_args = True  # Indicate that the next two arguments should be swapped
-            continue
-
-        if next_arg_is_variable:
-            if arg.startswith('.'):  # Ensure it's a properly formatted variable name
-                # Attempt to resolve the variable's value
-                resolved_value = variables.get(arg, "UNDEFINED")
-                if resolved_value == "UNDEFINED":
-                    print(f"Warning: Variable {arg} is not defined.")
-                resolved_args.append(resolved_value)
-            next_arg_is_variable = False  # Reset for the next argument
-        else:
-            resolved_args.append(arg)  # Directly append if not a variable
-
-    # Apply argument swapping if required by 'se'
-    if swap_next_args and len(resolved_args) >= 2:
-        resolved_args[0], resolved_args[1] = resolved_args[1], resolved_args[0]
-
-    # Process the predicate with resolved and potentially swapped arguments
+    # Attempt to execute the predicate function with prepared arguments.
     if predicate_name in predicate_functions:
         try:
-            # Attempt to process the predicate with the resolved arguments
-            result = predicate_functions[predicate_name](resolved_args, variables)
-            print(f"Processed {predicate_name} with args {resolved_args}: Result - {result}")
-        except Exception as e:  # Catch more general exception if needed
+            result = predicate_functions[predicate_name](args, variables)
+            print(f"Processed {predicate_name} with args {args}: Result - {result}")
+        except Exception as e:
             print(f"Error processing {predicate_name}: {e}")
     else:
         print(f"Unknown predicate: {predicate_name}")
 
 def tokenize_lojban(input_text):
-    input_text += ' '  # Ensure processing of the last token
+    """
+    Tokenizes Lojban text into identifiable tokens for processing.
+
+    Args:
+        input_text (str): The Lojban text to tokenize.
+
+    Returns:
+        list: A list of tokens identified from the input text.
+    """
+    input_text += ' '  # Ensure the last token is processed.
     tokens = []
 
     buffer = ""
     in_period_enclosed_name = False
 
+    # Process each character in the input text.
     for char in input_text:
         if char.isalpha() or char.isdigit():
             buffer += char
         elif char == '.':
+            # Handle period-enclosed names.
             if not in_period_enclosed_name:
                 in_period_enclosed_name = True
                 buffer += char
             else:
-                if buffer:  # Ensure buffer is not empty before appending
+                if buffer:
                     tokens.append(('Name', buffer + char))
                     buffer = ""
                 in_period_enclosed_name = False
         elif char.isspace():
             if buffer:
-                # Determine token type based on buffer content and specific rules
                 token_type = determine_token_type(buffer)
                 tokens.append((token_type, buffer))
                 buffer = ""
@@ -120,19 +126,33 @@ def tokenize_lojban(input_text):
     return tokens
 
 def determine_token_type(buffer):
-    # Placeholder logic to determine the token type
+    """
+    Determines the type of a token based on its content.
+
+    Args:
+        buffer (str): The token content to classify.
+
+    Returns:
+        str: The classified token type.
+    """
     if buffer.isdigit():
         return 'Number'
     elif len(buffer) == 1:
-        return 'Short Word' if buffer != 'i' else 'Other'  # Special handling for 'i'
+        return 'Short Word' if buffer != 'i' else 'Other'
     elif len(buffer) == 5:
         return 'Predicate Word'
     elif buffer.startswith('.') and buffer.endswith('.'):
         return 'Name'
     else:
         return 'Other'
-    
+
 def print_variables(variables):
-    print("Predicate Words and Their Values:")
+    """
+    Prints the variables and their assigned values.
+
+    Args:
+        variables (dict): The variables to print.
+    """
+    print("Variables and Their Values:")
     for variable, value in variables.items():
         print(f"{variable}: {value}")
