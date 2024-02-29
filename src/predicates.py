@@ -7,20 +7,20 @@ def fatci(arguments, variables):
     return result
 
 def sumji(arguments, variables):
-    # Assuming arguments are in the form [variable_name, addend1, addend2]
-    variable_name, addend1, addend2 = arguments
-    addend1_value = int(variables.get(addend1, addend1))
-    addend2_value = int(variables.get(addend2, addend2))
-    sum_result = addend1_value + addend2_value
+    # Assuming arguments are [operand1, '.variable_name.', operand2] due to 'se' swapping
+    operand1, variable_name, operand2 = arguments
 
-    # Check if the variable already exists and has a different value
-    if variable_name in variables and variables[variable_name] != sum_result:
-        print(f"sumji({arguments}): Attempt to reassign '{variable_name}' to a new value {sum_result}, which is inconsistent with its existing value {variables[variable_name]}")
-        return False  # Inconsistent reassignment detected
+    # Convert operands to integers if they are not variable names
+    operand1_val = int(variables[operand1]) if operand1 in variables else int(operand1)
+    operand2_val = int(variables[operand2]) if operand2 in variables else int(operand2)
 
-    # Otherwise, update the variable and return True
+    # Perform the sum operation
+    sum_result = operand1_val + operand2_val
+
+    # If the variable does not exist, assign the sum result to it
     variables[variable_name] = sum_result
-    print(f"sumji({arguments}): {sum_result}")
+
+    print(f"{variable_name} assigned {sum_result}")
     return True
 
 def vujni(arguments, variables):

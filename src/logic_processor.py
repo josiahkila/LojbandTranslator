@@ -1,9 +1,96 @@
 # logic_processor.py
 import re
-from src.predicates import fatci, sumji, vujni, dunli, steni, steko, cmavo
+from predicates import fatci, sumji, vujni, dunli, steni, steko, cmavo
 
-def parse_input(input_text):
-    input_text = input_text.lower() + ' '  # Ensure processing of the last token
+predicate_functions = {
+    'fatci': fatci,
+    'sumji': sumji,
+    'vujni': vujni,
+    'dunli': dunli,
+    'steni': steni,
+    'steko': steko,
+    'cmavo': cmavo,
+    # Add more mappings as needed
+}
+
+def process_lojban_statement(statement, variables):
+    # The 'variables' dictionary is now passed in as an argument
+    tokens = tokenize_lojban(statement)  # Tokenize the input statement correctly
+
+    # Initialize control variables
+    predicate_name = None
+    args = []
+    swap_next_args = False  # Flag to indicate if the next predicate's arguments should be swapped
+
+    for token_type, token_value in tokens:
+        if token_value == 'i':
+            continue  # Skip the initial 'i', denoting the start of a statement
+
+        if token_type == 'Short Word' and token_value == 'se':
+            swap_next_args = True
+            continue  # 'se' indicates argument swap for the next predicate; it's not an argument itself
+
+        if token_type == 'Predicate Word':
+            # Before processing the new predicate, check if there's a previous predicate to process
+            if predicate_name:
+                process_predicate(predicate_name, args, variables, swap_next_args)
+                args = []  # Reset arguments for the next predicate
+                swap_next_args = False  # Reset the swap flag after processing
+
+            predicate_name = token_value  # Update the current predicate
+        else:
+            # Append other tokens as arguments (excluding 'se')
+            args.append(token_value)
+
+    # Process the last predicate in the statement
+    if predicate_name:
+        process_predicate(predicate_name, args, variables, swap_next_args)
+
+    return "Lojban statement processing complete."
+
+def process_predicate(predicate_name, args, variables, swap_next_args):
+    # Initialize a list to hold the resolved arguments for the predicate
+    resolved_args = []
+
+    # Track whether the next argument should be treated as a variable name due to 'lo'
+    next_arg_is_variable = False
+
+    for arg in args:
+        if arg == 'lo':
+            next_arg_is_variable = True  # The next argument should be treated as a variable name
+            continue
+        elif arg == 'se' and not swap_next_args:
+            swap_next_args = True  # Indicate that the next two arguments should be swapped
+            continue
+
+        if next_arg_is_variable:
+            if arg.startswith('.'):  # Ensure it's a properly formatted variable name
+                # Attempt to resolve the variable's value
+                resolved_value = variables.get(arg, "UNDEFINED")
+                if resolved_value == "UNDEFINED":
+                    print(f"Warning: Variable {arg} is not defined.")
+                resolved_args.append(resolved_value)
+            next_arg_is_variable = False  # Reset for the next argument
+        else:
+            resolved_args.append(arg)  # Directly append if not a variable
+
+    # Apply argument swapping if required by 'se'
+    if swap_next_args and len(resolved_args) >= 2:
+        resolved_args[0], resolved_args[1] = resolved_args[1], resolved_args[0]
+
+    # Process the predicate with resolved and potentially swapped arguments
+    if predicate_name in predicate_functions:
+        try:
+            # Attempt to process the predicate with the resolved arguments
+            result = predicate_functions[predicate_name](resolved_args, variables)
+            print(f"Processed {predicate_name} with args {resolved_args}: Result - {result}")
+        except Exception as e:  # Catch more general exception if needed
+            print(f"Error processing {predicate_name}: {e}")
+    else:
+        print(f"Unknown predicate: {predicate_name}")
+
+def tokenize_lojban(input_text):
+    input_text += ' '  # Ensure processing of the last token
     tokens = []
 
     buffer = ""
@@ -13,98 +100,39 @@ def parse_input(input_text):
         if char.isalpha() or char.isdigit():
             buffer += char
         elif char == '.':
-            # Check for consecutive periods or start/end of a period-enclosed name
-            if not buffer and not in_period_enclosed_name:
-                # Starting a new name with a period
+            if not in_period_enclosed_name:
                 in_period_enclosed_name = True
                 buffer += char
-            elif buffer and in_period_enclosed_name:
-                # Ending a name with a period
-                buffer += char
-                tokens.append(('Name', buffer))
-                print(f"Token: {buffer}, Type: Name")
-                buffer = ""
-                in_period_enclosed_name = False
             else:
-                # Invalid usage of periods
-                raise ValueError(f"Invalid period usage near: {buffer}")
+                if buffer:  # Ensure buffer is not empty before appending
+                    tokens.append(('Name', buffer + char))
+                    buffer = ""
+                in_period_enclosed_name = False
         elif char.isspace():
             if buffer:
-                # Process the accumulated buffer
-                if buffer.isdigit():
-                    # Number validation for leading zeros
-                    if len(buffer) > 1 and buffer.startswith('0'):
-                        raise ValueError(f"Invalid number with leading zeros: {buffer}")
-                    tokens.append(('Number', buffer))
-                elif len(buffer) == 1 and buffer != 'i':  # Exclude 'i'
-                    tokens.append(('Short Word', buffer))
-                elif len(buffer) == 5:
-                    tokens.append(('Predicate Word', buffer))
-                else:
-                    # Generic catch-all for other tokens
-                    tokens.append(('Other', buffer))
-                print(f"Token: {buffer}, Type: Other")
+                # Determine token type based on buffer content and specific rules
+                token_type = determine_token_type(buffer)
+                tokens.append((token_type, buffer))
                 buffer = ""
         else:
-            # Catch-all for any other characters
             raise ValueError(f"Invalid character in input: {char}")
 
     return tokens
 
-def count_characters(text):
-    """
-    Counts the number of characters in the provided text.
-
-    Args:
-        text (str): The text to analyze.
-
-    Returns:
-        int: The total number of characters in the text.
-    """
-    return len(text)
-
-
-def count_words(text):
-    """
-    Counts the number of words in the provided text.
-
-    Args:
-        text (str): The text to analyze.
-
-    Returns:
-        int: The total number of words in the text.
-    """
-    words = text.split()
-    return len(words)
-
-
-def simple_translate(text, translation_dict):
-    """
-    Translates words in the provided text based on a translation dictionary.
-
-    Args:
-        text (str): The text to translate.
-        translation_dict (dict): A dictionary mapping words from the source language to the target language.
-
-    Returns:
-        str: The translated text.
-    """
-    words = text.split()
-    translated_words = [translation_dict.get(word, word) for word in words]
-    return ' '.join(translated_words)
-
-
-# Example translation dictionary (expand according to your needs)
-translation_dict = {
-    'hello': 'hola',
-    'world': 'mundo',
-    # Add more word translations here
-}
-
-# Example usage (this part is usually not included in the module itself but shown here for demonstration)
-if __name__ == "__main__":
-    sample_text = "hello world"
-    print("Original text:", sample_text)
-    print("Character count:", count_characters(sample_text))
-    print("Word count:", count_words(sample_text))
-    print("Translated text:", simple_translate(sample_text, translation_dict))
+def determine_token_type(buffer):
+    # Placeholder logic to determine the token type
+    if buffer.isdigit():
+        return 'Number'
+    elif len(buffer) == 1:
+        return 'Short Word' if buffer != 'i' else 'Other'  # Special handling for 'i'
+    elif len(buffer) == 5:
+        return 'Predicate Word'
+    elif buffer.startswith('.') and buffer.endswith('.'):
+        return 'Name'
+    else:
+        return 'Other'
+    
+def print_variables(variables):
+    print("Predicate Words and Their Values:")
+    for variable, value in variables.items():
+        print(f"{variable}: {value}")
